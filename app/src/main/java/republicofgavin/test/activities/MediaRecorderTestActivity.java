@@ -1,10 +1,13 @@
-package republicofgavin.pauseresumeaudiorecorder;
+package republicofgavin.test.activities;
 
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Environment;
 import android.view.View;
 import android.widget.Button;
+
+import republicofgavin.pauseresumeaudiorecorder.PauseResumeAudioRecorder;
+import republicofgavin.test.R;
 
 public class MediaRecorderTestActivity extends Activity implements View.OnClickListener {
 
@@ -35,13 +38,11 @@ public class MediaRecorderTestActivity extends Activity implements View.OnClickL
 
     }
     @Override
-    public void onResume(){
-        super.onResume();
-    }
-    @Override
     public void onDestroy(){
         super.onDestroy();
-        mediaRecorder.stopRecording();
+        if (mediaRecorder.getCurrentState()==PauseResumeAudioRecorder.RECORDING_STATE || mediaRecorder.getCurrentState()==PauseResumeAudioRecorder.PAUSED_STATE) {
+            mediaRecorder.stopRecording();
+        }
     }
 
     @Override
