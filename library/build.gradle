@@ -8,7 +8,7 @@ android {
         minSdkVersion 11
         targetSdkVersion 22
         versionCode 1
-        versionName "1.0"
+        versionName "1.0-SNAPSHOT"
     }
     buildTypes {
         release {
@@ -24,3 +24,4 @@ dependencies {
     testCompile 'junit:junit:4.12'
     testCompile 'org.robolectric:robolectric:2.4'
 }
+apply from: '../maven_push.gradle'

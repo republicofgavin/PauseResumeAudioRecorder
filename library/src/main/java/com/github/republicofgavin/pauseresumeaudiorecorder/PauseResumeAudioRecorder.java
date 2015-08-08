@@ -1,9 +1,11 @@
-package republicofgavin.pauseresumeaudiorecorder;
+package com.github.republicofgavin.pauseresumeaudiorecorder;
 
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.util.Log;
+
+import com.github.republicofgavin.pauseresumeaudiorecorder.conversion.PcmWavConverter;
 
 import java.io.BufferedOutputStream;
 import java.io.DataOutputStream;
@@ -12,8 +14,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import republicofgavin.pauseresumeaudiorecorder.conversion.PcmWavConverter;
 
 /**
  * An audio recorder that supports pause/resume functionality. All files are recorded as PCM files and then converted into WAV files upon stop being called. All recording and writing to the file is done on a separate thread with the configurations it had when recording started.

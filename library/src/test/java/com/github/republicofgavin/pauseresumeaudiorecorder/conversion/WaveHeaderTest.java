@@ -1,4 +1,4 @@
-package republicofgavin.pauseresumeaudiorecorder.conversion;
+package com.github.republicofgavin.pauseresumeaudiorecorder.conversion;
 
 import junit.framework.Assert;
 

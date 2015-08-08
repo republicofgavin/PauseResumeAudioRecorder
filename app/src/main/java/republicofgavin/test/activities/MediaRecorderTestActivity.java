@@ -6,7 +6,8 @@ import android.os.Environment;
 import android.view.View;
 import android.widget.Button;
 
-import republicofgavin.pauseresumeaudiorecorder.PauseResumeAudioRecorder;
+import com.github.republicofgavin.pauseresumeaudiorecorder.PauseResumeAudioRecorder;
+
 import republicofgavin.test.R;
 
 public class MediaRecorderTestActivity extends Activity implements View.OnClickListener {

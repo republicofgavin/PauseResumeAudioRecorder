@@ -1,4 +1,4 @@
-package republicofgavin.pauseresumeaudiorecorder.shadows;
+package com.github.republicofgavin.pauseresumeaudiorecorder.shadows;
 
 import android.media.AudioRecord;
 

@@ -1,9 +1,11 @@
-package republicofgavin.pauseresumeaudiorecorder;
+package com.github.republicofgavin.pauseresumeaudiorecorder;
 
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.Environment;
+
+import com.github.republicofgavin.pauseresumeaudiorecorder.shadows.ShadowAudioRecord;
 
 import junit.framework.Assert;
 
@@ -17,8 +19,6 @@ import org.robolectric.annotation.Config;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import republicofgavin.pauseresumeaudiorecorder.shadows.ShadowAudioRecord;
 
 /**
  * Tests {@link PauseResumeAudioRecorder}
