@@ -5,6 +5,7 @@ import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.Environment;
 
+import com.github.republicofgavin.pauseresumeaudiorecorder.conversion.PcmWavConverter;
 import com.github.republicofgavin.pauseresumeaudiorecorder.shadows.ShadowAudioRecord;
 
 import junit.framework.Assert;
@@ -12,12 +13,16 @@ import junit.framework.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.util.Timer;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -28,6 +33,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Config(manifest = Config.NONE,shadows=ShadowAudioRecord.class, emulateSdk = 18)
 public class PauseResumeAudioRecorderTest {
     private PauseResumeAudioRecorder pauseResumeAudioRecorder;
+    private boolean failTest;
 
     private Field sampleRateInHertzField;
     private Field channelConfigField;
@@ -35,12 +41,25 @@ public class PauseResumeAudioRecorderTest {
     private Field audioFileField;
     private Field currentAudioStateField;
     private Field currentAudioRecordingThreadField;
+
+    private Field recordingStartTimeMillisField;
+    private Field remainingMaxTimeInMillisField;
+    private Field onTimeCompletedTimerField;
+    private Field onTimeCompletionTimerTaskField;
+    private Field onTimeCompletionListenerField;
+    private Field maxTimeInMillisField;
+
+    private Field onFileSizeReachedListenerField;
+    private Field maxFileSizeInBytesField;
     //thread fields
     private Field audioRecordThreadField;
-
+    @Mock
+    private Timer mockTimer;
     @Before
     public void setup()throws NoSuchFieldException,IllegalAccessException{
+        MockitoAnnotations.initMocks(this);
         pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        failTest=true;
 
         sampleRateInHertzField=PauseResumeAudioRecorder.class.getDeclaredField("sampleRateInHertz");
         sampleRateInHertzField.setAccessible(true);
@@ -60,6 +79,29 @@ public class PauseResumeAudioRecorderTest {
         currentAudioRecordingThreadField=PauseResumeAudioRecorder.class.getDeclaredField("currentAudioRecordingThread");
         currentAudioRecordingThreadField.setAccessible(true);
 
+        recordingStartTimeMillisField=PauseResumeAudioRecorder.class.getDeclaredField("recordingStartTimeMillis");
+        recordingStartTimeMillisField.setAccessible(true);
+
+        onTimeCompletedTimerField=PauseResumeAudioRecorder.class.getDeclaredField("onTimeCompletedTimer");
+        onTimeCompletedTimerField.setAccessible(true);
+
+        onTimeCompletionTimerTaskField=PauseResumeAudioRecorder.class.getDeclaredField("onTimeCompletionTimerTask");
+        onTimeCompletionTimerTaskField.setAccessible(true);
+
+        onTimeCompletionListenerField=PauseResumeAudioRecorder.class.getDeclaredField("onTimeCompletionListener");
+        onTimeCompletionListenerField.setAccessible(true);
+
+        remainingMaxTimeInMillisField=PauseResumeAudioRecorder.class.getDeclaredField("remainingMaxTimeInMillis");
+        remainingMaxTimeInMillisField.setAccessible(true);
+
+        maxTimeInMillisField=PauseResumeAudioRecorder.class.getDeclaredField("maxTimeInMillis");
+        maxTimeInMillisField.setAccessible(true);
+
+        onFileSizeReachedListenerField=PauseResumeAudioRecorder.class.getDeclaredField("onFileSizeReachedListener");
+        onFileSizeReachedListenerField.setAccessible(true);
+
+        maxFileSizeInBytesField=PauseResumeAudioRecorder.class.getDeclaredField("maxFileSizeInBytes");
+        maxFileSizeInBytesField.setAccessible(true);
     }
     @Test
     public void testConstructor()throws IllegalAccessException{
@@ -69,6 +111,8 @@ public class PauseResumeAudioRecorderTest {
         Assert.assertEquals("Default channel config is incorrect", AudioFormat.CHANNEL_IN_MONO, channelConfigField.get(pauseResumeAudioRecorder));
         Assert.assertEquals("Default audio encoding is incorrect", AudioFormat.ENCODING_PCM_16BIT, audioEncodingField.get(pauseResumeAudioRecorder));
         Assert.assertEquals("Default audio file is incorrect", null, audioFileField.get(pauseResumeAudioRecorder));
+        Assert.assertNull("Time completion listener is not null", onTimeCompletionListenerField.get(pauseResumeAudioRecorder));
+        Assert.assertNull("Max File size reached listener is not null",onFileSizeReachedListenerField.get(pauseResumeAudioRecorder));
     }
     @Test
     public void testSetAudioEncoding()throws IllegalAccessException{
@@ -87,6 +131,79 @@ public class PauseResumeAudioRecorderTest {
         PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
         currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.RECORDING_STATE));
         pauseResumeAudioRecorder.setAudioEncoding(AudioFormat.ENCODING_PCM_8BIT);
+    }
+    @Test
+    public void testSetMaxFileSizeInBytes()throws IllegalAccessException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        pauseResumeAudioRecorder.setMaxFileSizeInBytes(2000L);
+
+        Assert.assertEquals("remainingMaxTime incorrect", 2000L, (long) maxFileSizeInBytesField.get(pauseResumeAudioRecorder));
+    }
+    @Test(expected=IllegalArgumentException.class)
+    public void testSetMaxFileSizeInBytesMin(){new PauseResumeAudioRecorder().setMaxFileSizeInBytes(999);}
+    @Test(expected=IllegalArgumentException.class)
+    public void testSetMaxFileSizeInBytesMax(){new PauseResumeAudioRecorder().setMaxFileSizeInBytes(PcmWavConverter.MAX_SIZE_WAV_FILE_BYTES + 1);}
+    @Test(expected=IllegalStateException.class)
+    public void testSetMaxFileSizeInBytesBadState()throws IllegalAccessException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.RECORDING_STATE));
+        pauseResumeAudioRecorder.setMaxFileSizeInBytes(1000L);
+    }
+    @Test
+    public void testSetOnFileSizeReachedListener()throws IllegalAccessException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.INITIALIZED_STATE));
+        final OnMaxFileSizeReachedListener onMaxFileSizeReachedListener=new OnMaxFileSizeReachedListener();
+        pauseResumeAudioRecorder.setOnFileSizeReachedListener(onMaxFileSizeReachedListener);
+
+        Assert.assertEquals("Listener incorrect", onMaxFileSizeReachedListener, onFileSizeReachedListenerField.get(pauseResumeAudioRecorder));
+
+        pauseResumeAudioRecorder.setOnFileSizeReachedListener(null);
+
+        Assert.assertEquals("Listener incorrect null case", null, onFileSizeReachedListenerField.get(pauseResumeAudioRecorder));
+    }
+    @Test(expected = IllegalStateException.class)
+    public void testSetOnFileSizeReachedListenerInvalidState()throws IllegalAccessException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.RECORDING_STATE));
+        pauseResumeAudioRecorder.setOnFileSizeReachedListener(null);
+    }
+    @Test
+    public void testSetOnTimeCompletionListener()throws IllegalAccessException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.INITIALIZED_STATE));
+        final OnMaxTimeCompletionListener onMaxTimeCompletionListener=new OnMaxTimeCompletionListener();
+        pauseResumeAudioRecorder.setOnTimeCompletionListener(onMaxTimeCompletionListener);
+
+        Assert.assertEquals("Listener incorrect", onMaxTimeCompletionListener, onTimeCompletionListenerField.get(pauseResumeAudioRecorder));
+
+        pauseResumeAudioRecorder.setOnTimeCompletionListener(null);
+
+        Assert.assertEquals("Listener incorrect null case", null, onTimeCompletionListenerField.get(pauseResumeAudioRecorder));
+    }
+    @Test(expected = IllegalStateException.class)
+    public void testSetOnTimeCompletionListenerInvalidState()throws IllegalAccessException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.RECORDING_STATE));
+        pauseResumeAudioRecorder.setOnTimeCompletionListener(null);
+    }
+    @Test
+    public void testSetMaxTimeInMillis()throws IllegalAccessException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        pauseResumeAudioRecorder.setMaxTimeInMillis(2000);
+
+        Assert.assertEquals("remainingMaxTime incorrect", 2000, (long) remainingMaxTimeInMillisField.get(pauseResumeAudioRecorder));
+        Assert.assertEquals("maxTime incorrect", 2000, (long) maxTimeInMillisField.get(pauseResumeAudioRecorder));
+    }
+    @Test(expected=IllegalArgumentException.class)
+    public void testSetMaxTimeInMillisMin(){new PauseResumeAudioRecorder().setMaxTimeInMillis(999);}
+    @Test(expected=IllegalArgumentException.class)
+    public void testSetMaxTimeInMillisMax(){new PauseResumeAudioRecorder().setMaxTimeInMillis(PcmWavConverter.MAX_TIME_WAV_FILE_MILLIS+1);}
+    @Test(expected=IllegalStateException.class)
+    public void testSetMaxTimeInMillisBadState()throws IllegalAccessException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.RECORDING_STATE));
+        pauseResumeAudioRecorder.setMaxTimeInMillis(1000);
     }
     @Test
     public void testSetAudioFile()throws IllegalAccessException{
@@ -162,11 +279,13 @@ public class PauseResumeAudioRecorderTest {
 
         Assert.assertEquals("States are not equal", PauseResumeAudioRecorder.RECORDING_STATE, ((AtomicInteger) currentAudioStateField.get(pauseResumeAudioRecorder)).get());
     }
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testStartRecordingBadState()throws IllegalAccessException{
         PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
-        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.PAUSED_STATE));
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.INITIALIZED_STATE));
         pauseResumeAudioRecorder.startRecording();
+
+        Assert.assertEquals("State was changed", PauseResumeAudioRecorder.INITIALIZED_STATE,pauseResumeAudioRecorder.getCurrentState());
     }
     @Test
     public void testStartRecording()throws NoSuchFieldException, IllegalAccessException,InterruptedException{
@@ -180,6 +299,9 @@ public class PauseResumeAudioRecorderTest {
 
         Assert.assertNotNull("Recording thread is not created", currentAudioRecordingThreadField.get(pauseResumeAudioRecorder));
         Assert.assertEquals("Correct state not set", PauseResumeAudioRecorder.RECORDING_STATE, pauseResumeAudioRecorder.getCurrentState());
+        Assert.assertNotNull("Timer is null", onTimeCompletedTimerField.get(pauseResumeAudioRecorder));
+        Assert.assertNotNull("TimerTask is null",onTimeCompletionTimerTaskField.get(pauseResumeAudioRecorder));
+        Assert.assertTrue("start time not set",((long)recordingStartTimeMillisField.get(pauseResumeAudioRecorder))>=0);
 
         Thread.sleep(100);//Give it some time to create the file.
 
@@ -207,33 +329,40 @@ public class PauseResumeAudioRecorderTest {
 
         pauseResumeAudioRecorder.startRecording();
         //Thread should not have been created in this situation.
-        Assert.assertNull("Thread was created",currentAudioRecordingThreadField.get(pauseResumeAudioRecorder));
-    }
-    @Test(expected = IllegalStateException.class)
-    public void testStartRecordingInvalidState()throws IllegalAccessException{
-        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();//no file set
-        pauseResumeAudioRecorder.startRecording();
+        Assert.assertNull("Thread was created", currentAudioRecordingThreadField.get(pauseResumeAudioRecorder));
     }
     @Test
-    public void testPauseRecording()throws InterruptedException{
+    public void testStartRecordingInvalidState()throws IllegalAccessException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();//no file set
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.INITIALIZED_STATE));
+
+        pauseResumeAudioRecorder.startRecording();
+
+        Assert.assertEquals("State was changed.", PauseResumeAudioRecorder.INITIALIZED_STATE, pauseResumeAudioRecorder.getCurrentState());
+    }
+    @Test
+    public void testPauseRecording()throws InterruptedException,IllegalAccessException{
         PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
         pauseResumeAudioRecorder.setAudioFile(Environment.getExternalStorageDirectory() + "/recording.wav");
         pauseResumeAudioRecorder.setChannel(AudioFormat.CHANNEL_IN_STEREO);
         pauseResumeAudioRecorder.setSampleRate(44100);
         pauseResumeAudioRecorder.setAudioEncoding(AudioFormat.ENCODING_PCM_8BIT);
         pauseResumeAudioRecorder.startRecording();
+        onTimeCompletedTimerField.set(pauseResumeAudioRecorder, mockTimer);
 
         Thread.sleep(100);
         pauseResumeAudioRecorder.pauseRecording();
+        Thread.sleep(200);
 
+        Assert.assertTrue("remaining time is not less than max", ((long) remainingMaxTimeInMillisField.get(pauseResumeAudioRecorder)) < PcmWavConverter.MAX_TIME_WAV_FILE_MILLIS);
+        Mockito.verify(mockTimer,Mockito.times(1)).cancel();
         Assert.assertEquals("Correct state not set", PauseResumeAudioRecorder.PAUSED_STATE, pauseResumeAudioRecorder.getCurrentState());
-
         final File pcmFile=new File(Environment.getExternalStorageDirectory() + "/recording.pcm");
         pcmFile.delete();
 
         Thread.sleep(100);//Give it time to recreate the file if it is running incorrectly.
 
-        Assert.assertFalse("Thread is not paused",pcmFile.exists());
+        Assert.assertFalse("Thread is not paused", pcmFile.exists());
     }
     @Test
     public void testPauseRecordingWhilePaused()throws IllegalAccessException{
@@ -244,8 +373,14 @@ public class PauseResumeAudioRecorderTest {
 
         new File(Environment.getExternalStorageDirectory() + "/recording.pcm").delete();
     }
-    @Test(expected=IllegalStateException.class)
-    public void testPauseRecordingInvalidState()throws IllegalAccessException{new PauseResumeAudioRecorder().pauseRecording();}
+    @Test
+    public void testPauseRecordingInvalidState()throws IllegalAccessException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.INITIALIZED_STATE));
+        pauseResumeAudioRecorder.pauseRecording();
+
+        Assert.assertEquals("State was changed", PauseResumeAudioRecorder.INITIALIZED_STATE, pauseResumeAudioRecorder.getCurrentState());
+    }
     @Test
     public void testStopRecording()throws IllegalAccessException,NoSuchFieldException, InterruptedException{
         PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
@@ -268,19 +403,17 @@ public class PauseResumeAudioRecorderTest {
         Assert.assertFalse("PCM file still exists", new File(Environment.getExternalStorageDirectory() + "/recording.pcm").exists());
         Assert.assertTrue("WAV file does not exist", new File(Environment.getExternalStorageDirectory() + "/recording.wav").exists());
 
-
         Assert.assertFalse("AudioRecord is still recording",shadowAudioRecord.isRecording);
 
         new File(Environment.getExternalStorageDirectory() + "/recording.wav").delete();
     }
     @Test
-    public void testStopRecordingWhileStopped()throws IllegalAccessException{
+    public void testStopRecordingInvalidState()throws IllegalAccessException{
         PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
-        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.STOPPED_STATE));
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.INITIALIZED_STATE));
         pauseResumeAudioRecorder.stopRecording();
+        Assert.assertEquals("State was changed.",PauseResumeAudioRecorder.INITIALIZED_STATE,pauseResumeAudioRecorder.getCurrentState());
     }
-    @Test(expected = IllegalStateException.class)
-    public void testStopRecordingInvalidState(){new PauseResumeAudioRecorder().stopRecording();}
 
     @Test
     public void testResumeRecording()throws IllegalAccessException{
@@ -292,12 +425,55 @@ public class PauseResumeAudioRecorderTest {
         Assert.assertEquals("Wrong state was set", PauseResumeAudioRecorder.RECORDING_STATE, pauseResumeAudioRecorder.getCurrentState());
     }
     @Test
-    public void testResumeRecordingWhileRecording()throws IllegalAccessException{
+    public void testResumeRecordingInvalidState()throws IllegalAccessException{
         PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
-        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.RECORDING_STATE));
+        currentAudioStateField.set(pauseResumeAudioRecorder, new AtomicInteger(PauseResumeAudioRecorder.INITIALIZED_STATE));
         pauseResumeAudioRecorder.resumeRecording();
+        Assert.assertEquals("State was changed",PauseResumeAudioRecorder.INITIALIZED_STATE,pauseResumeAudioRecorder.getCurrentState());
     }
-    @Test(expected = IllegalStateException.class)
-    public void testResumeRecordingInvalidState(){new PauseResumeAudioRecorder().resumeRecording();}
+    @Test
+    public void testOnMaxTimeCompletionListener()throws InterruptedException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        pauseResumeAudioRecorder.setAudioFile(Environment.getExternalStorageDirectory() + "/recording.wav");
+        pauseResumeAudioRecorder.setChannel(AudioFormat.CHANNEL_IN_STEREO);
+        pauseResumeAudioRecorder.setSampleRate(44100);
+        pauseResumeAudioRecorder.setAudioEncoding(AudioFormat.ENCODING_PCM_8BIT);
+        pauseResumeAudioRecorder.setMaxTimeInMillis(1000);
+        pauseResumeAudioRecorder.setOnTimeCompletionListener(new OnMaxTimeCompletionListener());
+
+        pauseResumeAudioRecorder.startRecording();
+        Thread.sleep(1100);
+
+        Assert.assertFalse("completion listener was not called", failTest);
+        new File(Environment.getExternalStorageDirectory() + "/recording.wav").delete();
+    }
+    @Test
+    public void testMaxFileSizeReached()throws InterruptedException{
+        PauseResumeAudioRecorder pauseResumeAudioRecorder=new PauseResumeAudioRecorder();
+        pauseResumeAudioRecorder.setAudioFile(Environment.getExternalStorageDirectory() + "/recording.wav");
+        pauseResumeAudioRecorder.setChannel(AudioFormat.CHANNEL_IN_STEREO);
+        pauseResumeAudioRecorder.setSampleRate(44100);
+        pauseResumeAudioRecorder.setAudioEncoding(AudioFormat.ENCODING_PCM_8BIT);
+        pauseResumeAudioRecorder.setMaxFileSizeInBytes(1000L);
+        pauseResumeAudioRecorder.setOnFileSizeReachedListener(new OnMaxFileSizeReachedListener());
+
+        pauseResumeAudioRecorder.startRecording();
+        Thread.sleep(1100);
+
+        Assert.assertFalse("completion listener was not called", failTest);
+        new File(Environment.getExternalStorageDirectory() + "/recording.wav").delete();
+    }
+    private class OnMaxTimeCompletionListener implements PauseResumeAudioRecorder.OnTimeCompletionListener{
+        @Override
+        public void onTimeCompleted(PauseResumeAudioRecorder pauseResumeAudioRecorder) {
+            failTest=false;
+        }
+    }
+    private class OnMaxFileSizeReachedListener implements PauseResumeAudioRecorder.OnFileSizeReachedListener{
+        @Override
+        public void onFileSizeReached(PauseResumeAudioRecorder pauseResumeAudioRecorder) {
+            failTest=false;
+        }
+    }
 
 }

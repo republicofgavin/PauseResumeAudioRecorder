@@ -18,6 +18,14 @@ public class PcmWavConverter {
     private static final short PCM_FORMAT=1;
 
     /**
+     * 6 hours, 47 minutes, and 59 seconds (1 second less than max allowed in header).
+     */
+    public static final long MAX_TIME_WAV_FILE_MILLIS=1000*24479;
+    /**
+     * 2GB size limit. Supported by all formats(https://en.wikipedia.org/wiki/WAV).
+     */
+    public static final long MAX_SIZE_WAV_FILE_BYTES=2L*1073741824L;
+    /**
      *
      * @param waveHeader A {@link PcmWavConverter.WaveHeader} composed of the format of data location at the pcmFilePath. Cannot be null.
      * @param pcmFilePath The absolute path to the PCM file. Cannot be: null, empty, blank. It is recommended that the file have a .pcm suffix.
