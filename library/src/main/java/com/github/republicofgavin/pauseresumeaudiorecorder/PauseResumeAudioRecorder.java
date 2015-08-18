@@ -332,13 +332,13 @@ public class PauseResumeAudioRecorder {
                         for (int i = 0; i < length; i++) {
                             dataOutputStream.writeShort(readingBuffer[i]);
                         }
+                        //If the next input clip goes over, just stop the thread now.
+                        if (currentFileSizeInBytes+bufferSizeInBytes>=threadMaxFileSizeInBytes){
+                            currentAudioState.getAndSet(STOPPED_STATE);
+                            new Thread(new MaxSizeReachedRunnable()).run();
+                        }
+                        currentFileSizeInBytes=currentFileSizeInBytes+bufferSizeInBytes;
                     }
-                    //If the next input clip goes over, just stop the thread now.
-                    if (currentFileSizeInBytes+bufferSizeInBytes>=threadMaxFileSizeInBytes){
-                        currentAudioState.getAndSet(STOPPED_STATE);
-                        new Thread(new MaxSizeReachedRunnable()).run();
-                    }
-                    currentFileSizeInBytes=currentFileSizeInBytes+bufferSizeInBytes;
                     currentState = currentAudioState.getAndSet(currentAudioState.get());
                 }
                 currentAudioRecording.stop();
