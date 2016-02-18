@@ -228,6 +228,7 @@ public class PauseResumeAudioRecorder {
             onTimeCompletedTimer=new Timer(true);
             onTimeCompletionTimerTask=new MaxTimeTimerTask();
             onTimeCompletedTimer.schedule(onTimeCompletionTimerTask,maxTimeInMillis);
+            remainingMaxTimeInMillis=maxTimeInMillis;
             recordingStartTimeMillis=System.currentTimeMillis();
         }
         else{
@@ -242,7 +243,7 @@ public class PauseResumeAudioRecorder {
         if (currentAudioState.get()==RECORDING_STATE){
             currentAudioState.getAndSet(PAUSED_STATE);
             onTimeCompletedTimer.cancel();
-            remainingMaxTimeInMillis=System.currentTimeMillis()-recordingStartTimeMillis;
+            remainingMaxTimeInMillis=remainingMaxTimeInMillis-(System.currentTimeMillis()-recordingStartTimeMillis);
         }
         else{
             Log.w(TAG,"Audio recording is not recording");
