@@ -46,7 +46,7 @@ public class PcmWavConverter {
         if (wavFilePath==null || wavFilePath.trim().isEmpty()){
             throw new IllegalArgumentException("wavFilePath cannot be null, empty, blank");
         }
-        final DataOutputStream dataOutputStream = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(wavFilePath)));
+        final DataOutputStream dataOutputStream = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(wavFilePath+"part")));
         final DataInputStream dataInputStream=new DataInputStream(new BufferedInputStream(new FileInputStream(pcmFile)));
         try {
             //NOTE: The PCM data recording format data as Big Endian. However, WAV files require it in Little Endian, so, it is inverted.
@@ -77,7 +77,10 @@ public class PcmWavConverter {
             dataOutputStream.close();
             dataInputStream.close();
         }
-
+        final File partWavFile=new File(wavFilePath+"part");
+        if (!partWavFile.renameTo(new File(wavFilePath))){
+            throw new IOException("Unable to rename file to:"+wavFilePath);
+        }
     }
     private static void writePCMData(final DataOutputStream out, final DataInputStream in)throws IOException{
         while (in.available()>0){

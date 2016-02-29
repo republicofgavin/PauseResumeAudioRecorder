@@ -355,7 +355,7 @@ public class PauseResumeAudioRecorderTest {
         Thread.sleep(200);
 
         long remainingTimeMillis=((long) remainingMaxTimeInMillisField.get(pauseResumeAudioRecorder));
-        Assert.assertTrue((remainingTimeMillis<PcmWavConverter.MAX_TIME_WAV_FILE_MILLIS-100) &&remainingTimeMillis>PcmWavConverter.MAX_TIME_WAV_FILE_MILLIS-4000);
+        Assert.assertTrue("wrong time:"+remainingTimeMillis,(remainingTimeMillis<(PcmWavConverter.MAX_TIME_WAV_FILE_MILLIS-100)) &&remainingTimeMillis>(PcmWavConverter.MAX_TIME_WAV_FILE_MILLIS-4000));
         Mockito.verify(mockTimer,Mockito.times(1)).cancel();
         Assert.assertEquals("Correct state not set", PauseResumeAudioRecorder.PAUSED_STATE, pauseResumeAudioRecorder.getCurrentState());
         final File pcmFile=new File(Environment.getExternalStorageDirectory() + "/recording.pcm");
