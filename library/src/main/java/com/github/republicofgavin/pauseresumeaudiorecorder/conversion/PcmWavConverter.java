@@ -3,11 +3,13 @@ package com.github.republicofgavin.pauseresumeaudiorecorder.conversion;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
+import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 
 /**
  * Converts PCM (Big Endian format) files to WAV (Little Endian format).
@@ -25,11 +27,32 @@ public class PcmWavConverter {
      * 2GB size limit. Supported by all formats(https://en.wikipedia.org/wiki/WAV).
      */
     public static final long MAX_SIZE_WAV_FILE_BYTES=2L*1073741824L;
+
+    /**
+     * This method appends the passed in {@link com.github.republicofgavin.pauseresumeaudiorecorder.conversion.PcmWavConverter.WaveHeader} to the beginning of the passed in
+     * .wav file. NOTE: To prevent data from being overwritten by this method, it is advisable to write some junk data that is the size of the wav header at the beginning of the file.
+     * This way, only the junk data is destroyed when you are ready to add the header to the finished file.
+     * @param waveHeader A {@link PcmWavConverter.WaveHeader} composed of the format of data location at the pcmFilePath. Cannot be null.
+     * @param wavFilePath The absolute path to where the WAV file will be created. Directory path should already be created. String cannot be: null, empty, blank. It is recommended that the file have a .wav suffix.
+     * @throws IllegalArgumentException If the parameters are invalid.
+     */
+    public static void addWavHeader(WaveHeader waveHeader,final String wavFilePath)throws IOException{
+        if (waveHeader ==null){
+            throw new IllegalArgumentException("waveHeader cannot be null");
+        }
+        if (wavFilePath==null || wavFilePath.trim().isEmpty()){
+            throw new IllegalArgumentException("wavFilePath cannot be null, empty, blank");
+        }
+        RandomAccessFile randomAccessFile=new RandomAccessFile(new File(wavFilePath),"rw");
+        randomAccessFile.seek(0L);
+        writeWavHeader(waveHeader,randomAccessFile,new File(wavFilePath));
+        randomAccessFile.close();
+    }
     /**
      *
      * @param waveHeader A {@link PcmWavConverter.WaveHeader} composed of the format of data location at the pcmFilePath. Cannot be null.
      * @param pcmFilePath The absolute path to the PCM file. Cannot be: null, empty, blank. It is recommended that the file have a .pcm suffix.
-     * @param wavFilePath The absolute path to where the WAV file will be created. Directory path should already be created. String cannot be: null, empty, blank. It is recommended that the file have a .wavs uffix.
+     * @param wavFilePath The absolute path to where the WAV file will be created. Directory path should already be created. String cannot be: null, empty, blank. It is recommended that the file have a .wav suffix.
      * @throws IOException If there is a problem reading/writing between the PCM and WAV files. Such as the WAV file already existing or the PCM file not existing. Or if one of them is a directory.
      * @throws IllegalArgumentException If the parameters are invalid.
      */
@@ -46,30 +69,10 @@ public class PcmWavConverter {
         if (wavFilePath==null || wavFilePath.trim().isEmpty()){
             throw new IllegalArgumentException("wavFilePath cannot be null, empty, blank");
         }
-        final DataOutputStream dataOutputStream = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(wavFilePath+"part")));
+        final DataOutputStream dataOutputStream = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(wavFilePath)));
         final DataInputStream dataInputStream=new DataInputStream(new BufferedInputStream(new FileInputStream(pcmFile)));
         try {
-            //NOTE: The PCM data recording format data as Big Endian. However, WAV files require it in Little Endian, so, it is inverted.
-            //Has to be integer (http://www.topherlee.com/software/pcm-tut-wavformat.html), so if cast fails, it is too big to be a wav file.
-            final int numberOfBytes = (waveHeader.byteNumber == -1) ? ((int) pcmFile.length()) : waveHeader.byteNumber;
-
-            dataOutputStream.writeBytes("RIFF");
-            dataOutputStream.writeInt(Integer.reverseBytes(36+numberOfBytes));
-            dataOutputStream.writeBytes("WAVE");
-
-            dataOutputStream.writeBytes("fmt ");
-            dataOutputStream.writeInt(Integer.reverseBytes(16));
-            dataOutputStream.writeShort(Short.reverseBytes(PCM_FORMAT));
-            dataOutputStream.writeShort(Short.reverseBytes(waveHeader.channelNum));
-            dataOutputStream.writeInt(Integer.reverseBytes(waveHeader.sampleRateInHertz));
-            dataOutputStream.writeInt(Integer.reverseBytes(waveHeader.channelNum * waveHeader.sampleRateInHertz * waveHeader.bitRate / 8));
-
-            dataOutputStream.writeShort(Short.reverseBytes((short) (waveHeader.channelNum * waveHeader.bitRate / 8)));
-            dataOutputStream.writeShort(Short.reverseBytes(waveHeader.bitRate));
-
-            dataOutputStream.writeBytes("data");
-            dataOutputStream.writeInt(Integer.reverseBytes(numberOfBytes));
-
+            writeWavHeader(waveHeader,dataOutputStream,new File(pcmFilePath));
             writePCMData(dataOutputStream, dataInputStream);
         }
         finally {
@@ -77,13 +80,35 @@ public class PcmWavConverter {
             dataOutputStream.close();
             dataInputStream.close();
         }
-        final File partWavFile=new File(wavFilePath+"part");
+        final File partWavFile=new File(wavFilePath);
         if (!partWavFile.renameTo(new File(wavFilePath))){
             throw new IOException("Unable to rename file to:"+wavFilePath);
         }
     }
+    private static void writeWavHeader(final WaveHeader waveHeader,final DataOutput dataOutputStream,final File pcmFile)throws IOException{
+        //NOTE: The PCM data recording format data as Big Endian. However, WAV files require it in Little Endian, so, it is inverted.
+        //Has to be integer (http://www.topherlee.com/software/pcm-tut-wavformat.html), so if cast fails, it is too big to be a wav file.
+        final int numberOfBytes = (waveHeader.byteNumber == -1) ? ((int) pcmFile.length()) : waveHeader.byteNumber;
+
+        dataOutputStream.writeBytes("RIFF");
+        dataOutputStream.writeInt(Integer.reverseBytes(36+numberOfBytes));
+        dataOutputStream.writeBytes("WAVE");
+
+        dataOutputStream.writeBytes("fmt ");
+        dataOutputStream.writeInt(Integer.reverseBytes(16));
+        dataOutputStream.writeShort(Short.reverseBytes(PCM_FORMAT));
+        dataOutputStream.writeShort(Short.reverseBytes(waveHeader.channelNum));
+        dataOutputStream.writeInt(Integer.reverseBytes(waveHeader.sampleRateInHertz));
+        dataOutputStream.writeInt(Integer.reverseBytes(waveHeader.channelNum * waveHeader.sampleRateInHertz * waveHeader.bitRate / 8));
+
+        dataOutputStream.writeShort(Short.reverseBytes((short) (waveHeader.channelNum * waveHeader.bitRate / 8)));
+        dataOutputStream.writeShort(Short.reverseBytes(waveHeader.bitRate));
+
+        dataOutputStream.writeBytes("data");
+        dataOutputStream.writeInt(Integer.reverseBytes(numberOfBytes));
+    }
     private static void writePCMData(final DataOutputStream out, final DataInputStream in)throws IOException{
-        while (in.available()>0){
+        while (in.available()>0) {
             final short data=in.readShort();
             out.writeByte(data & 0xFF);
             out.writeByte((data >> 8) & 0xFF);

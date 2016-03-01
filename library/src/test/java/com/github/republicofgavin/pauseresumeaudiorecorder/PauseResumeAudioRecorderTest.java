@@ -210,10 +210,10 @@ public class PauseResumeAudioRecorderTest {
         pauseResumeAudioRecorder.setAudioFile("/recording.wav");
 
         Assert.assertEquals("Wrong state was set", PauseResumeAudioRecorder.PREPARED_STATE, pauseResumeAudioRecorder.getCurrentState());
-        Assert.assertEquals("Wrong audio file was set", audioFileField.get(pauseResumeAudioRecorder), "/recording.pcm");
+        Assert.assertEquals("Wrong audio file was set", audioFileField.get(pauseResumeAudioRecorder), "/recording.temp");
 
         pauseResumeAudioRecorder.setAudioFile("/recording");
-        Assert.assertEquals("Wrong audio file was set", audioFileField.get(pauseResumeAudioRecorder), "/recording.pcm");
+        Assert.assertEquals("Wrong audio file was set", audioFileField.get(pauseResumeAudioRecorder), "/recording.temp");
     }
     @Test(expected=IllegalArgumentException.class)
     public void testSetAudioFileNullCase(){pauseResumeAudioRecorder.setAudioFile(null);}
@@ -317,7 +317,7 @@ public class PauseResumeAudioRecorderTest {
         Assert.assertEquals("AudioRecord has wrong audio source", MediaRecorder.AudioSource.MIC,shadowAudioRecord.audioSource);
         Assert.assertEquals("AudioRecord has wrong channel config", AudioFormat.CHANNEL_IN_STEREO, shadowAudioRecord.channelConfig);
 
-        final File pcmFile=new File(Environment.getExternalStorageDirectory() + "/recording.pcm");
+        final File pcmFile=new File(Environment.getExternalStorageDirectory() + "/recording.temp");
         Assert.assertTrue(pcmFile.exists());
         pcmFile.delete();
     }
@@ -355,7 +355,7 @@ public class PauseResumeAudioRecorderTest {
         Thread.sleep(200);
 
         long remainingTimeMillis=((long) remainingMaxTimeInMillisField.get(pauseResumeAudioRecorder));
-        Assert.assertTrue("wrong time:"+remainingTimeMillis,(remainingTimeMillis<(PcmWavConverter.MAX_TIME_WAV_FILE_MILLIS-100)) &&remainingTimeMillis>(PcmWavConverter.MAX_TIME_WAV_FILE_MILLIS-4000));
+        Assert.assertTrue("wrong time:"+remainingTimeMillis,(remainingTimeMillis<=(PcmWavConverter.MAX_TIME_WAV_FILE_MILLIS-100)) &&remainingTimeMillis>(PcmWavConverter.MAX_TIME_WAV_FILE_MILLIS-5000));
         Mockito.verify(mockTimer,Mockito.times(1)).cancel();
         Assert.assertEquals("Correct state not set", PauseResumeAudioRecorder.PAUSED_STATE, pauseResumeAudioRecorder.getCurrentState());
         final File pcmFile=new File(Environment.getExternalStorageDirectory() + "/recording.pcm");

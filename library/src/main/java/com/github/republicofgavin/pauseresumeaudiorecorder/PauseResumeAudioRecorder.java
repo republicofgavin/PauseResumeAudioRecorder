@@ -151,7 +151,7 @@ public class PauseResumeAudioRecorder {
     }
     /**
      * Setter for the audioFile. If the file does not contain a .wav suffix, it will be added. If the file has a suffix other than .wav, it will be removed. This API puts it in the prepared state.
-     * NOTE: The .wav file does not exist until the stop recording (and subsequent conversion) is completed. Where the data is stored temporarily is the same path and name just with .pcm instead of .wav.
+     * NOTE: The .wav file does not exist until the stop recording (and subsequent conversion) is completed. Where the data is stored temporarily is the same path and name just with .temp instead of .wav.
      * @param audioFilePath A fully qualified file path for the audio file to be stored. The file path should exist and the file should not, errors can occur during writing.
      * @throws IllegalArgumentException if the parameter is null, empty, blank.
      * @throws IllegalStateException If the API is called while the recorder is not initialized or prepared.
@@ -166,10 +166,10 @@ public class PauseResumeAudioRecorder {
         String modifiedAudioFilePath=audioFilePath;
         if (modifiedAudioFilePath.toLowerCase(Locale.getDefault()).contains(".")){
             final String subString=modifiedAudioFilePath.substring(modifiedAudioFilePath.lastIndexOf("."));
-            modifiedAudioFilePath=modifiedAudioFilePath.replace(subString,".pcm");
+            modifiedAudioFilePath=modifiedAudioFilePath.replace(subString,".temp");
         }
         else {
-            modifiedAudioFilePath=modifiedAudioFilePath+".pcm";
+            modifiedAudioFilePath=modifiedAudioFilePath+".temp";
         }
         this.audioFile=modifiedAudioFilePath;
         currentAudioState.getAndSet(PREPARED_STATE);
@@ -216,13 +216,13 @@ public class PauseResumeAudioRecorder {
         return currentAudioState.get();
     }
     /**
-     * Starts the recording if the recorder is in a prepared state. At this time, the complete file path should not have .pcm file(as that is where the writing is taking place) and the specified .wav file should not exist as well(as that is where the .pcm file will be converted to).
+     * Starts the recording if the recorder is in a prepared state. At this time, the complete file path should not have .temp file(as that is where the writing is taking place) and the specified .wav file should not exist as well(as that is where the .temp file will be converted to).
      * Does nothing if it is recorder is not in a prepared state.
      * @throws IllegalArgumentException If the parameters passed into it are invalid according to {@link AudioRecord}.getMinBufferSize API.
      */
     public void startRecording(){
         if (currentAudioState.get() == PREPARED_STATE) {
-            currentAudioRecordingThread = new AudioRecorderThread(audioFile.replace(".wav",".pcm"), MediaRecorder.AudioSource.MIC, sampleRateInHertz,channelConfig,audioEncoding,maxFileSizeInBytes);
+            currentAudioRecordingThread = new AudioRecorderThread(audioFile.replace(".wav",".temp"), MediaRecorder.AudioSource.MIC, sampleRateInHertz,channelConfig,audioEncoding,maxFileSizeInBytes);
             currentAudioState.set(RECORDING_STATE);
             currentAudioRecordingThread.start();
             onTimeCompletedTimer=new Timer(true);
@@ -320,9 +320,13 @@ public class PauseResumeAudioRecorder {
             currentAudioRecording.startRecording();
             final short[] readingBuffer = new short[bufferSizeInBytes];
             DataOutputStream dataOutputStream=null;
+            final short waveHeaderChannelConfig=(short)((threadChannelConfig==AudioFormat.CHANNEL_IN_MONO)?1:2);
+            final short waveHeaderBitrateConfig=(short)((AudioFormat.ENCODING_PCM_8BIT==threadAudioEncoding)?8:16);
             try {
                 dataOutputStream = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(threadAudioFile)));
                 int currentState = currentAudioState.getAndSet(currentAudioState.get());//This, unlike the normal get, does it atomically.
+                //we add a fake header to be a place holder for the real header, once the recording is complete.
+                PcmWavConverter.addWavHeader(new PcmWavConverter.WaveHeader(threadSampleRateHertz, waveHeaderChannelConfig, waveHeaderBitrateConfig),threadAudioFile);
                 long currentFileSizeInBytes=0;
                 while (currentState == RECORDING_STATE || currentState == PAUSED_STATE) {
                     if (currentState == PAUSED_STATE) {
@@ -331,7 +335,9 @@ public class PauseResumeAudioRecorder {
                     else {
                         final int length = currentAudioRecording.read(readingBuffer, 0, bufferSizeInBytes);
                         for (int i = 0; i < length; i++) {
-                            dataOutputStream.writeShort(readingBuffer[i]);
+                            //write the data in Little Endian format;
+                            dataOutputStream.writeByte(readingBuffer[i] & 0xFF);
+                            dataOutputStream.writeByte((readingBuffer[i] >> 8) & 0xFF);
                         }
                         currentFileSizeInBytes=currentFileSizeInBytes+bufferSizeInBytes;
                         //If the next input clip goes over, just stop the thread now.
@@ -358,13 +364,10 @@ public class PauseResumeAudioRecorder {
                     if (dataOutputStream !=null) {
                         dataOutputStream.flush();
                         dataOutputStream.close();
-                        //Convert the file
-                        final short waveHeaderChannelConfig=(short)((threadChannelConfig==AudioFormat.CHANNEL_IN_MONO)?1:2);
-                        final short waveHeaderBitrateConfig=(short)((AudioFormat.ENCODING_PCM_8BIT==threadAudioEncoding)?8:16);
-                        PcmWavConverter.convertPCMToWav(new PcmWavConverter.WaveHeader(threadSampleRateHertz, waveHeaderChannelConfig, waveHeaderBitrateConfig),
-                                threadAudioFile, threadAudioFile.replace(".pcm", ".wav"));
-                        if(!(new File(threadAudioFile).delete())){
-                            Log.e(TAG,"PCM file was not deleted.");
+                        PcmWavConverter.addWavHeader(new PcmWavConverter.WaveHeader(threadSampleRateHertz, waveHeaderChannelConfig, waveHeaderBitrateConfig), threadAudioFile);
+
+                        if(!(new File(threadAudioFile).renameTo(new File(threadAudioFile.replace(".temp", ".wav"))))){
+                            Log.e(TAG,"PCM file was not renamed.");
                             currentAudioState.getAndSet(ERROR_STATE);
                         }
                     }
