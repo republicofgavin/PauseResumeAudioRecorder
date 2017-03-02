@@ -350,6 +350,7 @@ public class PauseResumeAudioRecorder {
                     currentState = currentAudioState.getAndSet(currentAudioState.get());
                 }
                 currentAudioRecording.stop();
+                currentAudioRecording.release();
             }
             catch(IOException ex){
                 currentAudioState.getAndSet(ERROR_STATE);
