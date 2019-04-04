@@ -44,8 +44,9 @@ public class PauseResumeAudioRecorder {
     private TimerTask onTimeCompletionTimerTask;
     private Timer onTimeCompletedTimer;
     private long maxTimeInMillis;
-    private long recordingStartTimeMillis;
     private long remainingMaxTimeInMillis;
+    private long recordingLastPauseTimeMillis;
+    private long recordingTotalPauseTimeMillis = 0;
     /**
      * The stopped state flag. At this point, the file should be made and in the right format.
      */
@@ -228,8 +229,7 @@ public class PauseResumeAudioRecorder {
             onTimeCompletedTimer=new Timer(true);
             onTimeCompletionTimerTask=new MaxTimeTimerTask();
             onTimeCompletedTimer.schedule(onTimeCompletionTimerTask,maxTimeInMillis);
-            remainingMaxTimeInMillis=maxTimeInMillis;
-            recordingStartTimeMillis=System.currentTimeMillis();
+            recordingTotalPauseTimeMillis=0;
         }
         else{
             Log.w(TAG,"Audio recorder is not in prepared state. Ignoring call.");
@@ -243,7 +243,7 @@ public class PauseResumeAudioRecorder {
         if (currentAudioState.get()==RECORDING_STATE){
             currentAudioState.getAndSet(PAUSED_STATE);
             onTimeCompletedTimer.cancel();
-            remainingMaxTimeInMillis=remainingMaxTimeInMillis-(System.currentTimeMillis()-recordingStartTimeMillis);
+            recordingLastPauseTimeMillis = System.currentTimeMillis();
         }
         else{
             Log.w(TAG,"Audio recording is not recording");
@@ -257,9 +257,10 @@ public class PauseResumeAudioRecorder {
         if (currentAudioState.get()==PAUSED_STATE){
             recordingStartTimeMillis=System.currentTimeMillis();
             currentAudioState.getAndSet(RECORDING_STATE);
+            recordingTotalPauseTimeMillis+=System.currentTimeMillis()-recordingLastPauseTimeMillis;
             onTimeCompletedTimer=new Timer(true);
             onTimeCompletionTimerTask=new MaxTimeTimerTask();
-            onTimeCompletedTimer.schedule(onTimeCompletionTimerTask,remainingMaxTimeInMillis);
+            onTimeCompletedTimer.schedule(onTimeCompletionTimerTask,maxTimeInMillis-recordingTotalPauseTimeMillis);
         }
         else {
             Log.w(TAG,"Audio recording is not paused");
